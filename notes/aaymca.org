@@ -1,2 +1,21 @@
-* <2013-11-20 Wed>
-** 
+* <2013-11-24 Sun>
+** Run script in R >r CMD BATCH [script]
+*** better Rscript [script] 2>&1 | tee [logfile] (sends to stdout)
+** number of rows: 487686
+** Columns
+*** mem_id, min_family, chi_date, exp_data, mtp_mty_period, type, mem_desc, mem_state
+
+** TODO and questions
+*** 109738 - first entry in raw isn't in cleaned (bc first line?)
+*** Old entries unreliable? -> throw out before 2000?
+**** First entries for series in 2000s often start with old dated entry, can't throw out
+**** TODO plot mem_id vs earliest date!
+*** 2003 sometimes appears as 1993 (same for others?)
+*** Something up with 1994 (mostly 'New' with no fu), 11/28/94 ?
+*** Maybe CHI_DATE on 'New' is worthless?
+**** Not always earliest or entered
+*** Clean up mtp_mty_period (should be 4 chars)
+*** Each entry is a payment?
+*** mtp_mty_period doesn't always make sense (e.g. earlier year than chi_dates [144652])
+**** might correspond to financial year that is 'active'?
+*** "New" can signify change in type (e.g. Youth->Teen)?
