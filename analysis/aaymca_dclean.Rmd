@@ -1,0 +1,167 @@
+AA YMCA current data status
+==============
+
+`r opts_chunk$set(tidy = FALSE)`
+
+```{r loadLibraries,echo=F,message=F}
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+```
+Using: YMCA-DATA/'Original Data - Cleaned.txt'
+
+```{r showData,eval=F}
+ydata <- read.delim('../YMCA-DATA/Original Data - Cleaned.txt', header=F, stringsAsFactors=F)
+```
+```{r loadData,eval=T,echo=F,cache=F}
+ydata <- read.delim('/Users/elw/Dropbox/eMacs/projects/aaymca/YMCA-DATA/Original Data - Cleaned.txt', header=F, stringsAsFactors=F)
+colnames(ydata) <- c("mem_number_hash","MIN_FAMILY","CHI_DATE","EXP_DATE","MTP_MTY_PERIOD","MTP_MTY_TYP","MTP_PPL_DESCRIP","MST_MEM_STATE")
+```
+
+Convert to data.table
+
+```{r convertToDataTable,eval=T}
+ydata <- data.table(ydata); str(ydata)
+```
+
+<!-- Clean up dates -->
+
+```{r cleanUpDates,eval=T,echo=F,results='hide',cache=F}
+	ydata[,CHI_DATE:=as.Date(CHI_DATE, format='%m/%d/%Y %H:%M:%S')]
+	ydata[,EXP_DATE:=as.Date(EXP_DATE, format='%m/%d/%y')]
+	ydata[,MTP_MTY_PERIOD:=as.numeric(strtrim(ydata$MTP_MTY_PERIOD,4))]
+```
+
+<!-- Define useful functions -->
+
+```{r functionChunk,eval=T,echo=F,cache=F}
+	
+	nthSmallest <- function(vec, n=2){
+		sort(vec)[n]
+	}
+
+	hasNEntry <- function(vec,n=1){
+		return (sum(vec,na.rm=T)==n);
+	}
+
+	stateDate <- function(date_vec, state_vec,state){
+		sd=c(Inf);
+		if(!identical(state_vec[state_vec==state],character(0))){
+			sd=date_vec[state_vec[state_vec==state]];
+		}
+		return(sd);
+	}
+```
+<!-- Skim Data -->
+
+```{r skimData,eval=T,echo=F,message=F,warnings=F,cache=F}
+ydata <- suppressWarnings(ydata[,list(secondSmallestCD=nthSmallest(CHI_DATE,2),minCD=min(CHI_DATE), maxCD=max(CHI_DATE),minED=min(EXP_DATE),maxED=max(EXP_DATE),minMTY=min(MTP_MTY_PERIOD,na.rm=T), hasOneNew=hasNEntry(MST_MEM_STATE=="New",1),hasOneExp=hasNEntry(MST_MEM_STATE=="Expired")),by=mem_number_hash]);
+```
+
+Meaning of entry labels needs validation/clarification!
+
+Best guesses:
+- `mem_number_hash`: Member ID
+- `CHI_DATE`: Date of data point entry into system 
+	- First entry corresponds to beginning of membership?
+- `EXP_DATE`: Date of expiration of membership
+	- not always present
+- `MTP_MTY_PERIOD`: Tax year of membership(?)
+- `MST_MEM_STATE`: Status of membership at time of data point entry
+
+Some summary plots before data cleaning:
+
+```{r sumPlots_1,eval=T,echo=F,results='hide'}
+sp1_1=qplot(mem_number_hash,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+sp1_2=qplot(minCD, data=ydata, geom="histogram",xlim=c(as.Date('1985/1/1'),as.Date('2014/1/1')),binwidth=365);
+sp1_3=qplot(mem_number_hash,minMTY,data=ydata);
+sp1_4=qplot(minMTY,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+```
+
+```{r multiPlots_1,echo=F,dev='pdf'}
+	grid.arrange(sp1_1, sp1_2, sp1_3, sp1_4, ncol=2);
+```
+
+
+	Require at least one `CHI_DATE` entry for each member ID.
+```{r skimOneChiDate,eval=T,echo=F}
+	ydata <- ydata[!is.na(ydata$minCD),];
+```
+```{r sumPlots_2,eval=T,echo=F,results='hide'}
+sp2_1=qplot(mem_number_hash,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+sp2_2=qplot(minCD, data=ydata, geom="histogram",xlim=c(as.Date('1985/1/1'),as.Date('2014/1/1')),binwidth=365);
+sp2_3=qplot(mem_number_hash,minMTY,data=ydata);
+sp2_4=qplot(minMTY,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+```
+
+```{r multiPlots_2,echo=F,dev='pdf'}
+	grid.arrange(sp2_1, sp2_2, sp2_3, sp2_4, ncol=2);
+```
+
+	Require at least two `CHI_DATE` entries (ensure follow-up)
+```{r skimTwoChiDate,eval=T,echo=F}
+	ydata <- ydata[!is.na(ydata$secondSmallestCD),];
+```
+```{r sumPlots_3,eval=T,echo=F,results='hide'}
+sp3_1=qplot(mem_number_hash,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+sp3_2=qplot(minCD, data=ydata, geom="histogram",xlim=c(as.Date('1985/1/1'),as.Date('2014/1/1')),binwidth=365);
+sp3_3=qplot(mem_number_hash,minMTY,data=ydata);
+sp3_4=qplot(minMTY,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+```
+
+```{r multiPlots_3,echo=F,dev='pdf'}
+	grid.arrange(sp3_1, sp3_2, sp3_3, sp3_4, ncol=2);
+```
+
+
+	Remove all Y2K entries (unknown source)
+```{r skimY2K,eval=T,echo=F}
+	ydata <- ydata[minCD!='2000-01-01',]# d <- d[!is.na(d$MTP_MTY_PERIOD),] # some sort of weirdness here
+```
+```{r sumPlots_4,eval=T,echo=F,results='hide'}
+sp4_1=qplot(mem_number_hash,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+sp4_2=qplot(minCD, data=ydata, geom="histogram",xlim=c(as.Date('1985/1/1'),as.Date('2014/1/1')),binwidth=365);
+sp4_3=qplot(mem_number_hash,minMTY,data=ydata);
+sp4_4=qplot(minMTY,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+```
+
+```{r multiPlots_4,echo=F,dev='pdf'}
+	grid.arrange(sp4_1, sp4_2, sp4_3, sp4_4, ncol=2);
+```
+
+
+	Require *single* `New` and `Exp` entry for each member
+```{r skimOneNewExp,eval=T,echo=F}
+	ydata <- ydata[hasOneNew==TRUE,];
+	ydata <- ydata[hasOneExp==TRUE,];
+```
+```{r sumPlots_5,eval=T,echo=F,results='hide'}
+sp5_1=qplot(mem_number_hash,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+sp5_2=qplot(minCD, data=ydata, geom="histogram",xlim=c(as.Date('1985/1/1'),as.Date('2014/1/1')),binwidth=365);
+sp5_3=qplot(mem_number_hash,minMTY,data=ydata);
+sp5_4=qplot(minMTY,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+```
+
+```{r multiPlots_5,echo=F,dev='pdf'}
+	grid.arrange(sp5_1, sp5_2, sp5_3, sp5_4, ncol=2);
+```
+
+
+
+	Restrict to `MTP_MTY_PERIOD` > 2004
+```{r skimMinMty,eval=T,echo=F}
+	cur_name='minMTY'
+	set(ydata, which(is.infinite(ydata[[cur_name]])), j = cur_name,value =NA);
+	ydata <- ydata[minMTY>=2005,]
+```
+
+```{r sumPlots_6,eval=T,echo=F,results='hide'}
+	sp6_1=qplot(mem_number_hash,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+	sp6_2=qplot(minCD, data=ydata, geom="histogram",xlim=c(as.Date('1985/1/1'),as.Date('2014/1/1')),binwidth=365);
+	sp6_3=qplot(mem_number_hash,minMTY,data=ydata);
+	sp6_4=qplot(minMTY,minCD,data=ydata,ylim=c(as.Date('1985/1/1'),as.Date('2014/1/1')));
+```
+
+```{r multiPlots_6,echo=F,dev='pdf'}
+	grid.arrange(sp6_1, sp6_2, sp6_3, sp6_4, ncol=2);
+```
